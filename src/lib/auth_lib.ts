@@ -161,13 +161,14 @@ export class AuthLib {
   handleRegister = (req: Request, res: Response, next: NextFunction) => {
     this.validateFns[ALLOWED_ROUTES.REGISTER](req.body, async (user, err) => {
       if (err) {
-        res.status(401).json({
+        return res.status(401).json({
           message: "Registeration Failed",
           err,
         });
       }
 
       req.user = user;
+
       const { accessToken, refreshToken } = await this.getTokens(user);
       return res.status(201).json({
         user,
@@ -291,10 +292,10 @@ export class AuthLib {
           });
         }
 
-        //delete the  token
+        //delete the  token : prevents token replay
         await this.tokenRepository?.remove(decodedPayload.jti);
 
-        //generate new tokens
+        //generate new token
         this.validateFns["jwt"](decodedPayload, async (user, err) => {
           if (err) {
             return res.status(401).json({

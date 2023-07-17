@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from "express";
+import express, { Express } from "express";
 import APP_CONFIG from "./_config";
 import cors from "cors";
 import { AuthLib } from "./lib/auth_lib";
@@ -78,6 +78,8 @@ AuthStrategy.useJwtValidate(({ sub }: { sub: string; email: string }, done) => {
 app.use(express.json());
 app.use(cors());
 
+
+//Register Auth Router 
 app.use(AuthStrategy.getAuthRouter());
 
 app.listen(APP_CONFIG.PORT, () => {

@@ -52,7 +52,7 @@ export class Extractor {
     };
   }
 
-  static fromAuthHeaderWithScheme = function (auth_scheme: string) {
+  static fromAuthHeaderWithScheme(auth_scheme: string) {
     var auth_scheme_lower = auth_scheme.toLowerCase();
     return function (request: Request) {
       var token = null;
@@ -67,7 +67,7 @@ export class Extractor {
       }
       return token;
     };
-  };
+  }
 
   static fromAuthHeaderAsBearerToken() {
     return this.fromAuthHeaderWithScheme(BEARER_AUTH_SCHEME);

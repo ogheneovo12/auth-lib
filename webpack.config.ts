@@ -9,15 +9,33 @@ const getConfig = (
   require("dotenv").config({
     path: path.resolve(__dirname, `.env.${env.mode}`),
   });
+
+  const entryOutput: Record<
+    string,
+    {
+      entry: string;
+      output: string;
+    }
+  > = {
+    package: {
+      entry: "./src/index.ts",
+      output: "dist",
+    },
+    default: {
+      entry: "./src/server.ts",
+      output: "build",
+    },
+  };
+
   return {
-    entry: "./src/server.ts",
+    entry: entryOutput[env["type"] || "default"].entry,
     target: "node",
     mode: argv.mode === "production" ? "production" : "development",
     externals: [nodeExternals()],
     plugins: [
       new WebpackShellPluginNext({
         onBuildStart: {
-          scripts: ["npm run clean:dev && npm run clean:prod"],
+          scripts: ["npm run clean:dev && npm run clean:package"],
           blocking: true,
           parallel: false,
         },
@@ -45,7 +63,7 @@ const getConfig = (
       },
     },
     output: {
-      path: path.join(__dirname, "build"),
+      path: path.join(__dirname, entryOutput[env["type"] || "default"].output),
       filename: "index.js",
     },
     optimization: {
