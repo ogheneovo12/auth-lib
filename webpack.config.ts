@@ -60,7 +60,7 @@ const getConfig = (
               declaration: true,
               declarationMap: true,
               sourceMap: true,
-              declarationDir: path.resolve(__dirname, "types"),
+              declarationDir: path.resolve(__dirname, "./"),
             },
           },
           exclude: "/node_modules/",
