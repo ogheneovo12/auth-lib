@@ -4,6 +4,8 @@ import { Extractor } from "./helpers/extractors";
 import { createClient, RedisClientType } from "redis";
 import { Schema, Repository, EntityId } from "redis-om";
 import { v4 } from "uuid";
+import argon2 from "argon2";
+import ms from "ms";
 
 enum TokenType {
   REFRESH = "refresh",
@@ -21,13 +23,19 @@ type JWT_CONFIG = {
   audience: string | string[];
 };
 
+export type TokenSchema = {
+  sub: string;
+  hashedToken: string;
+  type: TokenType;
+  expires_in: string;
+};
 const tokenSchema = new Schema(
   "tokens",
   {
-    token: { type: "string" },
+    sub: { type: "string" },
+    hashedToken: { type: "string" },
     type: { type: "string" },
-    expires_at: { type: "string" },
-    last_used_at: { type: "string" },
+    expires_in: { type: "string" },
   },
   {
     dataStructure: "HASH",
@@ -38,7 +46,9 @@ export type AuthInitProps = {
   jwtConfig: JWT_CONFIG;
   redisUrl: string;
   authRoute?: string;
-  mapUserToJwtPayload: (user: any) => any;
+  mapUserToJwtPayload: (
+    user: any
+  ) => { sub: string } & { [index: string]: any };
 };
 
 enum ALLOWED_ROUTES {
@@ -54,7 +64,9 @@ type ValidateFn = (body: any, done: (user: any, err: any) => void) => void;
 const defaultInitProps: AuthInitProps = {
   redisUrl: "",
   authRoute: "/auth",
-  mapUserToJwtPayload: () => {},
+  mapUserToJwtPayload: () => ({
+    sub: "",
+  }),
   jwtConfig: {
     accessTokenSecret: "",
     refreshTokenSecret: "",
@@ -73,8 +85,7 @@ export class AuthLib {
   private authRoute?: string = defaultInitProps.authRoute;
   public router: Router = Router();
   private validateFns: Record<string, ValidateFn> = {};
-  public mapUserToJwtPayload: <U>(user: U) => any =
-    defaultInitProps.mapUserToJwtPayload;
+  public mapUserToJwtPayload = defaultInitProps.mapUserToJwtPayload;
   private tokenRepository: Repository | undefined;
 
   constructor(props: AuthInitProps = defaultInitProps) {
@@ -255,20 +266,35 @@ export class AuthLib {
         );
 
         if (!tokenExist) {
-          //TOKEN COMPROMISED
           return res.status(401).json({
             message: "Invalid Token",
             err: "Invalid Token",
           });
         }
 
-        // const token = await this.tokenRepository?.fetch(decode)
+        const token = (await this.tokenRepository?.fetch(
+          decodedPayload.jti
+        )) as unknown as TokenSchema;
 
-        // console.log(decodedPayload.jti);
+        //verify token hash
+        const tokenMatches = await argon2.verify(
+          token?.hashedToken || "",
+          refreshToken
+        );
 
-        //delete token
+        if (!tokenMatches) {
+          //I am not sure if this scenerio calls for a compromised situation
+          //should be able to provided functions that let the developer handle compromised situation
+          return res.status(401).json({
+            message: "Invalid Token",
+            err: "Invalid Token",
+          });
+        }
+
+        //delete the  token
         await this.tokenRepository?.remove(decodedPayload.jti);
 
+        //generate new tokens
         this.validateFns["jwt"](decodedPayload, async (user, err) => {
           if (err) {
             return res.status(401).json({
@@ -292,10 +318,14 @@ export class AuthLib {
 
   async getTokens(user: any) {
     const jwtid = v4();
+    const jwtPayload = this.mapUserToJwtPayload(user);
+    if (!jwtPayload.sub) {
+      throw new Error("JwtPayload Mapper Must Contain A sub Identifier");
+    }
     const accessToken = jwt.sign(
       {
         tokenType: TokenType.ACCESS,
-        ...this.mapUserToJwtPayload(user),
+        ...jwtPayload,
       },
       this.jwtConfig?.accessTokenSecret,
       {
@@ -306,7 +336,7 @@ export class AuthLib {
     );
 
     const refreshToken = jwt.sign(
-      { tokenType: TokenType.REFRESH, ...this.mapUserToJwtPayload(user) },
+      { tokenType: TokenType.REFRESH, ...jwtPayload },
       this.jwtConfig?.refreshTokenSecret,
       {
         expiresIn: this.jwtConfig.expiresIn.refresh,
@@ -316,11 +346,18 @@ export class AuthLib {
       }
     );
 
+    const hashedToken = await argon2.hash(refreshToken);
     await this.tokenRepository?.save(jwtid, {
-      token: refreshToken,
+      sub: jwtPayload.sub,
+      token: hashedToken,
       type: TokenType.REFRESH,
-      expires_in: this.jwtConfig.expiresIn.refresh, //TODO:- Replace with Actual Date
+      expires_in: this.jwtConfig.expiresIn.refresh,
     });
+
+    await this.tokenRepository?.expire(
+      jwtid,
+      ms(this.jwtConfig.expiresIn.refresh)
+    );
 
     return {
       accessToken,
