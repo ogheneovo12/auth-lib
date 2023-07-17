@@ -1,0 +1,353 @@
+import { Router, Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import { Extractor } from "./helpers/extractors";
+import { createClient, RedisClientType } from "redis";
+import { Schema, Repository, EntityId } from "redis-om";
+import { v4 } from "uuid";
+
+enum TokenType {
+  REFRESH = "refresh",
+  ACCESS = "access",
+}
+
+type JWT_CONFIG = {
+  refreshTokenSecret: string;
+  accessTokenSecret: string;
+  expiresIn: {
+    refresh: string;
+    access: string;
+  };
+  issuer: string;
+  audience: string | string[];
+};
+
+const tokenSchema = new Schema(
+  "tokens",
+  {
+    token: { type: "string" },
+    type: { type: "string" },
+    expires_at: { type: "string" },
+    last_used_at: { type: "string" },
+  },
+  {
+    dataStructure: "HASH",
+  }
+);
+
+export type AuthInitProps = {
+  jwtConfig: JWT_CONFIG;
+  redisUrl: string;
+  authRoute?: string;
+  mapUserToJwtPayload: (user: any) => any;
+};
+
+enum ALLOWED_ROUTES {
+  LOGIN = "login",
+  REGISTER = "register",
+  LOGOUT = "logout",
+  USER = "user",
+  REFRESH = "refresh",
+}
+
+type ValidateFn = (body: any, done: (user: any, err: any) => void) => void;
+
+const defaultInitProps: AuthInitProps = {
+  redisUrl: "",
+  authRoute: "/auth",
+  mapUserToJwtPayload: () => {},
+  jwtConfig: {
+    accessTokenSecret: "",
+    refreshTokenSecret: "",
+    expiresIn: {
+      refresh: "1d",
+      access: "7d",
+    },
+    issuer: "",
+    audience: "",
+  },
+};
+
+export class AuthLib {
+  private jwtConfig: JWT_CONFIG = defaultInitProps.jwtConfig;
+  private redis: RedisClientType | undefined;
+  private authRoute?: string = defaultInitProps.authRoute;
+  public router: Router = Router();
+  private validateFns: Record<string, ValidateFn> = {};
+  public mapUserToJwtPayload: <U>(user: U) => any =
+    defaultInitProps.mapUserToJwtPayload;
+  private tokenRepository: Repository | undefined;
+
+  constructor(props: AuthInitProps = defaultInitProps) {
+    this.init(props);
+  }
+
+  init({ jwtConfig, redisUrl, authRoute, mapUserToJwtPayload }: AuthInitProps) {
+    this.jwtConfig = jwtConfig;
+    this.authRoute = authRoute || this.authRoute;
+    this.mapUserToJwtPayload = mapUserToJwtPayload;
+    this.router = Router();
+    this.redis = createClient({
+      url: redisUrl,
+    });
+    this.tokenRepository = new Repository(tokenSchema, this.redis);
+    this.registerRedisEvents();
+    this.redis.connect();
+  }
+
+  registerRedisEvents() {
+    if (this.redis) {
+      this.redis?.on("error", (err) =>
+        console.log("[Redis Auth Client]:", err)
+      );
+      this.redis.on("connect", () =>
+        console.log("[Redis Auth Client]:connected to redis successfully ")
+      );
+      this.redis.on("end", () =>
+        console.log("[Redis Auth Client]:disconnected from redis ")
+      );
+      this.redis.on("reconnecting", () =>
+        console.log("[Redis Auth Client]:reconnecting to redis ")
+      );
+    }
+  }
+  useJwtValidate(
+    validateFn: (jwtPayload: any, done: (user: any, err: any) => void) => void
+  ) {
+    this.validateFns["jwt"] = validateFn;
+  }
+
+  useLoginValidate(validateFn: ValidateFn) {
+    this.validateFns[ALLOWED_ROUTES.LOGIN] = validateFn;
+  }
+
+  useRegisterValidate(validateFn: ValidateFn) {
+    this.validateFns[ALLOWED_ROUTES.REGISTER] = validateFn;
+  }
+
+  handleLogin = (req: Request, res: Response, next: NextFunction) => {
+    this.validateFns[ALLOWED_ROUTES.LOGIN](req.body, async (user, err) => {
+      if (err) {
+        return res.status(401).json({
+          message: "Login Failed",
+          err,
+        });
+      }
+      req.user = user;
+      const { accessToken, refreshToken } = await this.getTokens(user);
+      return res.status(201).json({
+        user,
+        accessToken,
+        refreshToken,
+      });
+    });
+  };
+
+  getAuthRouter() {
+    this.registerRoutes();
+    return this.router;
+  }
+
+  handleRegister = (req: Request, res: Response, next: NextFunction) => {
+    this.validateFns[ALLOWED_ROUTES.REGISTER](req.body, async (user, err) => {
+      if (err) {
+        res.status(401).json({
+          message: "Registeration Failed",
+          err,
+        });
+      }
+
+      req.user = user;
+      const { accessToken, refreshToken } = await this.getTokens(user);
+      return res.status(201).json({
+        user,
+        accessToken,
+        refreshToken,
+      });
+    });
+  };
+
+  handleGetUser = (req: Request, res: Response, next: NextFunction) => {
+    return res.status(200).json({
+      user: req.user,
+    });
+  };
+
+  authenticateJwt(
+    jwtExtractor: (
+      request: Request
+    ) => string | null = Extractor.fromAuthHeaderAsBearerToken()
+  ) {
+    return (req: Request, res: Response, next: NextFunction) => {
+      let token = jwtExtractor(req);
+      if (!token) {
+        return res
+          .status(200)
+          .json({ success: false, message: "Error! Token was not provided." });
+      }
+      try {
+        const decodedPayload = jwt.verify(
+          token,
+          this.jwtConfig.accessTokenSecret,
+          {
+            issuer: this.jwtConfig.issuer,
+            audience: this.jwtConfig.audience,
+          }
+        ) as any;
+
+        if (decodedPayload?.tokenType !== TokenType.ACCESS) {
+          return res.status(401).json({
+            message: "Invalid Token",
+            err: "Invalid Token",
+          });
+        }
+
+        this.validateFns["jwt"](decodedPayload, (user, err) => {
+          if (err) {
+            return res.status(401).json({
+              message: "Unathorized",
+              err,
+            });
+          }
+          req.user = user;
+          next();
+        });
+      } catch (err) {
+        return res.status(403).json({
+          message: (err as any)?.message,
+          err,
+        });
+      }
+    };
+  }
+
+  handleRefreshToken(
+    jwtExtractor: (
+      request: Request
+    ) => string | null = Extractor.fromAuthHeaderAsBearerToken()
+  ) {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      let refreshToken = jwtExtractor(req);
+
+      if (!refreshToken) {
+        return res
+          .status(200)
+          .json({ success: false, message: "Error! Token was not provided." });
+      }
+      try {
+        const decodedPayload = jwt.verify(
+          refreshToken,
+          this.jwtConfig.refreshTokenSecret,
+          {
+            issuer: this.jwtConfig.issuer,
+            audience: this.jwtConfig.audience,
+          }
+        ) as any;
+
+        if (decodedPayload?.tokenType !== TokenType.REFRESH) {
+          return res.status(401).json({
+            message: "Invalid Token",
+            err: "Invalid Token",
+          });
+        }
+
+        const tokenExist = await this.redis?.exists(
+          `tokens:${decodedPayload.jti}`
+        );
+
+        if (!tokenExist) {
+          //TOKEN COMPROMISED
+          return res.status(401).json({
+            message: "Invalid Token",
+            err: "Invalid Token",
+          });
+        }
+
+        // const token = await this.tokenRepository?.fetch(decode)
+
+        // console.log(decodedPayload.jti);
+
+        //delete token
+        await this.tokenRepository?.remove(decodedPayload.jti);
+
+        this.validateFns["jwt"](decodedPayload, async (user, err) => {
+          if (err) {
+            return res.status(401).json({
+              message: "Unathorized",
+              err,
+            });
+          }
+
+          const newTokens = await this.getTokens(user);
+
+          return res.status(200).json(newTokens);
+        });
+      } catch (err) {
+        return res.status(403).json({
+          message: (err as any)?.message,
+          err,
+        });
+      }
+    };
+  }
+
+  async getTokens(user: any) {
+    const jwtid = v4();
+    const accessToken = jwt.sign(
+      {
+        tokenType: TokenType.ACCESS,
+        ...this.mapUserToJwtPayload(user),
+      },
+      this.jwtConfig?.accessTokenSecret,
+      {
+        expiresIn: this.jwtConfig?.expiresIn?.access,
+        issuer: this.jwtConfig.issuer,
+        audience: this.jwtConfig.audience,
+      }
+    );
+
+    const refreshToken = jwt.sign(
+      { tokenType: TokenType.REFRESH, ...this.mapUserToJwtPayload(user) },
+      this.jwtConfig?.refreshTokenSecret,
+      {
+        expiresIn: this.jwtConfig.expiresIn.refresh,
+        issuer: this.jwtConfig.issuer,
+        audience: this.jwtConfig.audience,
+        jwtid,
+      }
+    );
+
+    await this.tokenRepository?.save(jwtid, {
+      token: refreshToken,
+      type: TokenType.REFRESH,
+      expires_in: this.jwtConfig.expiresIn.refresh, //TODO:- Replace with Actual Date
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  registerRoutes() {
+    this.router.post(
+      `${this.authRoute}/${ALLOWED_ROUTES.LOGIN}`,
+      this.handleLogin
+    );
+
+    this.router.post(
+      `${this.authRoute}/${ALLOWED_ROUTES.REGISTER}`,
+      this.handleRegister
+    );
+
+    this.router.get(
+      `${this.authRoute}/${ALLOWED_ROUTES.USER}`,
+      this.authenticateJwt(),
+      this.handleGetUser
+    );
+
+    this.router.get(
+      `${this.authRoute}/${ALLOWED_ROUTES.REFRESH}`,
+      this.handleRefreshToken()
+    );
+  }
+}
