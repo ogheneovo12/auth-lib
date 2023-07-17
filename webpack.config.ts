@@ -15,15 +15,18 @@ const getConfig = (
     {
       entry: string;
       output: string;
+      configFile: string;
     }
   > = {
     package: {
       entry: "./src/index.ts",
       output: "dist",
+      configFile: "tsconfig-package.json",
     },
     default: {
       entry: "./src/server.ts",
       output: "build",
+      configFile: "tsconfig.json",
     },
   };
 
@@ -51,8 +54,14 @@ const getConfig = (
         {
           test: /\.(ts|js)$/,
           loader: "ts-loader",
-          options: {},
-          exclude: /node_modules/,
+          options: {
+            configFile: entryOutput[env["type"] || "default"].configFile,
+            compilerOptions: {
+              declaration: true,
+              declarationDir: path.resolve(__dirname, "dist/types"),
+            },
+          },
+          exclude: "/node_modules/",
         },
       ],
     },

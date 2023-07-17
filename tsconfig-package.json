@@ -93,13 +93,13 @@
         "skipLibCheck": true /* Skip type checking all .d.ts files. */
     },
     "include": [
-        "src/**/*.ts",
-        "src/server.ts",
+        "src/lib/*.ts",
+        "src/index.ts",
         "src/express.d.ts"
     ],
     "exclude": [
         "node_modules",
         "src/**/*.spec.ts",
-        "src/**/__tests__/*.ts"
+        "src/**/__tests__/*.ts",
     ]
 }
