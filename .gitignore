@@ -3,6 +3,7 @@
 # dependencies
 /node_modules
 /redis-data
+/redis-data/*
 /.pnp
 .pnp.js
 

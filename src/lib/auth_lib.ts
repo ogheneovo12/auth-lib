@@ -349,7 +349,7 @@ export class AuthLib {
     const hashedToken = await argon2.hash(refreshToken);
     await this.tokenRepository?.save(jwtid, {
       sub: jwtPayload.sub,
-      token: hashedToken,
+      hashedToken,
       type: TokenType.REFRESH,
       expires_in: this.jwtConfig.expiresIn.refresh,
     });

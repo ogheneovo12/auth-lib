@@ -84,8 +84,6 @@ app.listen(APP_CONFIG.PORT, () => {
   console.log(
     `[⚡️ server]: Server is running at http://localhost:${APP_CONFIG.PORT}`
   );
-
   console.log("Loading Database...");
-  
   loadAllDb();
 });
