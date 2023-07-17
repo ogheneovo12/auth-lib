@@ -1,6 +1,2 @@
-import { AuthLib } from "./lib/auth_lib";
-import { Extractor } from "./lib/helpers/extractors";
-export default {
-  AuthLib,
-  Extractor,
-};
+export * from "./lib/auth_lib";
+export * from "./lib/helpers/extractors";

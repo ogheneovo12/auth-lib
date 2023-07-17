@@ -21,7 +21,7 @@ const getConfig = (
     package: {
       entry: "./src/index.ts",
       output: "dist",
-      configFile: "tsconfig-package.json",
+      configFile: "tsconfig.package.json",
     },
     default: {
       entry: "./src/server.ts",
@@ -59,7 +59,7 @@ const getConfig = (
             compilerOptions: {
               declaration: true,
               declarationMap: true,
-              declarationDir: path.resolve(__dirname, "types"),
+              declarationDir: path.resolve(__dirname, "@types"),
             },
           },
           exclude: "/node_modules/",
