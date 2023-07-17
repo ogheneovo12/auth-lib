@@ -124,6 +124,7 @@ export class AuthLib {
       );
     }
   }
+  
   useJwtValidate(
     validateFn: (jwtPayload: any, done: (user: any, err: any) => void) => void
   ) {
