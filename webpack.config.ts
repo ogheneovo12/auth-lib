@@ -58,7 +58,7 @@ const getConfig = (
             configFile: entryOutput[env["type"] || "default"].configFile,
             compilerOptions: {
               declaration: true,
-              declarationDir: path.resolve(__dirname, "dist/types"),
+              declarationDir: path.resolve(__dirname, "types"),
             },
           },
           exclude: "/node_modules/",
