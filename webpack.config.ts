@@ -57,10 +57,13 @@ const getConfig = (
           options: {
             configFile: entryOutput[env["type"] || "default"].configFile,
             compilerOptions: {
-              declaration: true,
-              declarationMap: true,
-              sourceMap: true,
-              declarationDir: path.resolve(__dirname, "./"),
+              declaration: env["type"] === "package",
+              declarationMap: env["type"] === "package",
+              sourceMap: env["type"] === "package",
+              declarationDir:
+                env["type"] === "package"
+                  ? path.resolve(__dirname, "types")
+                  : undefined,
             },
           },
           exclude: "/node_modules/",

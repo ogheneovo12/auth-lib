@@ -1,11 +1,14 @@
 import { Router, Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { JsonWebTokenError } from "jsonwebtoken";
 import { Extractor } from "./helpers/extractors";
 import { createClient, RedisClientType } from "redis";
 import { Schema, Repository, EntityId } from "redis-om";
 import { v4 } from "uuid";
 import argon2 from "argon2";
 import ms from "ms";
+import dayjs from "dayjs";
+import duration from "dayjs/plugin/duration";
+dayjs.extend(duration);
 
 enum TokenType {
   REFRESH = "refresh",
@@ -189,7 +192,7 @@ export class AuthLib {
       request: Request
     ) => string | null = Extractor.fromAuthHeaderAsBearerToken()
   ) {
-    return (req: Request, res: Response, next: NextFunction) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
       let token = jwtExtractor(req);
       if (!token) {
         return res
@@ -206,7 +209,22 @@ export class AuthLib {
           }
         ) as any;
 
-        if (decodedPayload?.tokenType !== TokenType.ACCESS) {
+        if (
+          decodedPayload?.tokenType !== TokenType.ACCESS ||
+          !decodedPayload.jti //backward support for access token previously without jti
+        ) {
+          return res.status(401).json({
+            message: "Invalid Token",
+            err: "Invalid Token",
+          });
+        }
+
+        const tokenExist = await this.redis?.exists(
+          `tokens:${decodedPayload.jti}`
+        );
+
+        //the assumption here is access token has already expired if it's not available in redis
+        if (tokenExist) {
           return res.status(401).json({
             message: "Invalid Token",
             err: "Invalid Token",
@@ -242,7 +260,7 @@ export class AuthLib {
 
       if (!refreshToken) {
         return res
-          .status(200)
+          .status(401)
           .json({ success: false, message: "Error! Token was not provided." });
       }
       try {
@@ -317,8 +335,90 @@ export class AuthLib {
     };
   }
 
+  handleRevokeAccessToken(
+    jwtExtractor: (
+      request: Request
+    ) => string | null = Extractor.fromAuthHeaderAsBearerToken()
+  ) {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      let accessToken = jwtExtractor(req);
+
+      if (!accessToken) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Bad Session Request" });
+      }
+
+      try {
+        const decodedPayload = jwt.verify(
+          accessToken,
+          this.jwtConfig.accessTokenSecret,
+          {
+            issuer: this.jwtConfig.issuer,
+            audience: this.jwtConfig.audience,
+          }
+        ) as any;
+
+        if (
+          decodedPayload?.tokenType !== TokenType.ACCESS ||
+          !decodedPayload.jti
+        ) {
+          return res.status(401).json({
+            message: "Bad Session Request",
+            err: "Bad Session Request",
+          });
+        }
+
+        const tokenExist = await this.redis?.exists(
+          `tokens:${decodedPayload.jti}`
+        );
+
+        if (tokenExist) {
+          return res.status(200).json({
+            message: "Sessioned Timed Out",
+          });
+        }
+
+        const hashedToken = await argon2.hash(accessToken);
+
+        await this.tokenRepository?.save(decodedPayload.jti, {
+          sub: decodedPayload.sub,
+          hashedToken,
+          type: TokenType.ACCESS,
+          expires_at: dayjs()
+            .add(
+              dayjs.duration(ms(this.jwtConfig.expiresIn.refresh)).asSeconds(),
+              "s"
+            )
+            .toISOString(),
+        });
+
+        await this.tokenRepository?.expire(
+          decodedPayload.jti,
+          dayjs.unix(decodedPayload.exp).diff(dayjs(), "seconds")
+        );
+
+        return res.status(200).json({
+          message: "Sessioned Timed Out",
+        });
+      } catch (err) {
+        console.log(err);
+        if ((err as JsonWebTokenError)?.message == "TokenExpiredError") {
+          return res.status(200).json({
+            message: "Sessioned Timed Out",
+          });
+        }
+        return res.status(403).json({
+          message: "Bad Session Request",
+          err,
+        });
+      }
+    };
+  }
+
   async getTokens(user: any) {
     const jwtid = v4();
+    const accessJwtId = v4();
     const jwtPayload = this.mapUserToJwtPayload(user);
     if (!jwtPayload.sub) {
       throw new Error("JwtPayload Mapper Must Contain A sub Identifier");
@@ -333,6 +433,7 @@ export class AuthLib {
         expiresIn: this.jwtConfig?.expiresIn?.access,
         issuer: this.jwtConfig.issuer,
         audience: this.jwtConfig.audience,
+        jwtid: accessJwtId,
       }
     );
 
@@ -352,12 +453,17 @@ export class AuthLib {
       sub: jwtPayload.sub,
       hashedToken,
       type: TokenType.REFRESH,
-      expires_in: this.jwtConfig.expiresIn.refresh,
+      expires_at: dayjs()
+        .add(
+          dayjs.duration(ms(this.jwtConfig.expiresIn.refresh)).asSeconds(),
+          "s"
+        )
+        .toISOString(),
     });
 
     await this.tokenRepository?.expire(
       jwtid,
-      ms(this.jwtConfig.expiresIn.refresh)
+      dayjs.duration(ms(this.jwtConfig.expiresIn.refresh)).asSeconds()
     );
 
     return {
@@ -386,6 +492,10 @@ export class AuthLib {
     this.router.get(
       `${this.authRoute}/${ALLOWED_ROUTES.REFRESH}`,
       this.handleRefreshToken()
+    );
+    this.router.post(
+      `${this.authRoute}/${ALLOWED_ROUTES.LOGOUT}`,
+      this.handleRevokeAccessToken()
     );
   }
 }
