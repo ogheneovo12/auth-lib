@@ -59,6 +59,7 @@ const getConfig = (
             compilerOptions: {
               declaration: true,
               declarationMap: true,
+              sourceMap: true,
               declarationDir: path.resolve(__dirname, "@types"),
             },
           },
