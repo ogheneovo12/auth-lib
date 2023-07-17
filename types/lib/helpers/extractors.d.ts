@@ -6,3 +6,4 @@ export declare class Extractor {
     static fromAuthHeaderWithScheme(auth_scheme: string): (request: Request) => string | null;
     static fromAuthHeaderAsBearerToken(): (request: Request<import("express-serve-static-core").ParamsDictionary, any, any, import("qs").ParsedQs, Record<string, any>>) => string | null;
 }
+//# sourceMappingURL=extractors.d.ts.map

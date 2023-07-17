@@ -61,3 +61,4 @@ export declare class AuthLib {
     registerRoutes(): void;
 }
 export {};
+//# sourceMappingURL=auth_lib.d.ts.map

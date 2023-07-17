@@ -58,6 +58,7 @@ const getConfig = (
             configFile: entryOutput[env["type"] || "default"].configFile,
             compilerOptions: {
               declaration: true,
+              declarationMap: true,
               declarationDir: path.resolve(__dirname, "types"),
             },
           },
