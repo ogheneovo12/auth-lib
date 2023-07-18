@@ -1,7 +1,7 @@
 import express, { Express } from "express";
 import APP_CONFIG from "./_config";
 import cors from "cors";
-import { AuthLib } from "./lib/auth_lib";
+import { AuthLib } from "./lib";
 import { loadAllDb, userDb } from "./db";
 
 type User = {

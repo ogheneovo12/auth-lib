@@ -1,12 +1,12 @@
 {
-  "name": "auth-lib",
+  "name": "jwt-auth-lib",
   "version": "1.1.0",
   "description": "",
   "main": "dist/index",
   "types": "types/index",
   "scripts": {
     "start": "node build/index.js",
-    "dev:build": "webpack --watch --env mode=development --config webpack.config.ts",
+    "dev:build": "webpack --watch --mode production --config webpack.config.ts",
     "dev:run-build": "nodemon build/index.js --watch build",
     "dev": "concurrently \"npm run dev:build\" \"npm run dev:run-build\"",
     "clean:dev": "rimraf build",

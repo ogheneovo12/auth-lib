@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import jwt, { JsonWebTokenError } from "jsonwebtoken";
-import { Extractor } from "./helpers/extractors";
+import Extractor from "./helpers/extractors";
 import { createClient, RedisClientType } from "redis";
-import { Schema, Repository, EntityId } from "redis-om";
+import { Schema, Repository } from "redis-om";
 import { v4 } from "uuid";
 import argon2 from "argon2";
 import ms from "ms";
@@ -82,7 +82,7 @@ const defaultInitProps: AuthInitProps = {
   },
 };
 
-export class AuthLib {
+class AuthLib {
   private jwtConfig: JWT_CONFIG = defaultInitProps.jwtConfig;
   private redis: RedisClientType | undefined;
   private authRoute?: string = defaultInitProps.authRoute;
@@ -124,7 +124,7 @@ export class AuthLib {
       );
     }
   }
-  
+
   useJwtValidate(
     validateFn: (jwtPayload: any, done: (user: any, err: any) => void) => void
   ) {
@@ -500,3 +500,5 @@ export class AuthLib {
     );
   }
 }
+
+export default AuthLib;

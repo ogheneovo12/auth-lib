@@ -14,7 +14,7 @@ function parseAuthHeader(hdrValue: string) {
 const AUTH_HEADER = "authorization";
 const BEARER_AUTH_SCHEME = "bearer";
 
-export class Extractor {
+class Extractor {
   static fromHeader(header_name: string) {
     return function (request: Request) {
       var token = null;
@@ -73,3 +73,6 @@ export class Extractor {
     return this.fromAuthHeaderWithScheme(BEARER_AUTH_SCHEME);
   }
 }
+
+
+export default Extractor;
