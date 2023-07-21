@@ -125,6 +125,7 @@ type RegisterPayload = {
   password: string;
 };
 
+const PORT = 3000;
 const authHeaderName = "Authorization";
 const refreshTokenScheme = "Refresh";
 const authHeadertokenExtractor = Extractor.fromHeader(authHeaderName);
@@ -232,8 +233,12 @@ app.get("/bare-protected", (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log("Server started on port 3000");
+app.listen(PORT, () => {
+  console.log(
+    `[⚡️ server]: Server is running at http://localhost:${PORT}`
+  );
+  console.log("Loading Database...");
+  loadAllDb();
 });
 
 ```
