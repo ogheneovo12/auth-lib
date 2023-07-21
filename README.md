@@ -145,7 +145,7 @@ app.post("/auth/logout", authLib.handleRevokeAccessToken());
 
 ```
 
-**NOTE:** **`authLib.handleRefreshToken()`** and **`authLib.handleRevokeAccessToken()`** are called because they allow developers to pass in a custom token extraction method for extracting refresh and access tokens from the request object. The default method used is from the extractor utility **`Extractor.fromAuthHeaderAsBearerToken()`**, which basically extracts the token from the authorization header using the Bearer Scheme. The Extractor utility exposes other extraction methods you can read in the extractor utility doc **[here](https://chat.openai.com/c/extractor-utility-doc-url)**.
+**NOTE:** **`authLib.handleRefreshToken()`** and **`authLib.handleRevokeAccessToken()`** are called because they allow developers to pass in a custom token extraction method for extracting refresh and access tokens from the request object. The default method used is from the extractor utility **`Extractor.fromAuthHeaderAsBearerToken()`**, which basically extracts the token from the authorization header using the Bearer Scheme. The Extractor utility exposes other extraction methods you can read in the extractor utility doc **[here](https://github.com/ogheneovo12/auth-lib/blob/main/Extractor.md)**.
 
 ### **Authenticating Protected Routes**
 
