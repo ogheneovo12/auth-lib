@@ -188,6 +188,11 @@ app.post("/auth/logout", authLib.handleRevokeAccessToken());
 }
 */
 ```
+## **Other Resources**
+- [Background](https://github.com/ogheneovo12/auth-lib/blob/main/docs/Background.md)
+- [AccessToken Strategy](https://github.com/ogheneovo12/auth-lib/blob/main/docs/AccessToken.md)
+- [Refresh Token Strategy](https://github.com/ogheneovo12/auth-lib/blob/main/docs/RefreshToken.md)
+- [Auth Routes](https://github.com/ogheneovo12/auth-lib/blob/main/docs/AuthRoutes.md)
 
 ## **Help and Discussion**
 
